@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import config  # noqa: F401  # .env 로드 및 클라이언트 초기화를 가장 먼저 실행
-from routers import chat, tts, stt
+from routers import chat  # 로컬 버전: tts, stt는 브라우저 음성 기능으로 대체
 
 if __package__:
     from .outing_api import router as outing_router
@@ -51,5 +51,3 @@ app.add_middleware(
 )
 
 app.include_router(chat.router)
-app.include_router(tts.router)
-app.include_router(stt.router)

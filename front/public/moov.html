@@ -2335,7 +2335,7 @@ function clearAccountUi() {
   MoovCourseMap.disposeWithin(content);
   if (mediaRecorder) { mediaRecorder.onstop = null; if (mediaRecorder.state !== "inactive") mediaRecorder.stop(); }
   if (audioStream) { audioStream.getTracks().forEach(track => track.stop()); audioStream = null; }
-  if (currentTtsAudio) { currentTtsAudio.pause(); currentTtsAudio = null; }
+  if (speechRecognition) { const recognition = speechRecognition; speechRecognition = null; recognition.abort(); }
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   latestHomeState = null;
   pendingHomeCourse = null;
@@ -3204,146 +3204,62 @@ function scrollChat() {
   if (box) box.scrollTop = box.scrollHeight;
 }
 
-let currentTtsAudio = null;
+// 로컬 버전: Azure Speech 대신 브라우저 내장 음성 기능(Web Speech API)을 사용한다.
+let speechRecognition = null;
 
-async function speakReply(text, detectedLanguage = null) {
-  if (!state.isAuthenticated) return;
-  const generation = authGeneration;
-  try {
-    // 이전에 재생 중이던 음성이 있으면 먼저 멈춤
-    if (currentTtsAudio) {
-      currentTtsAudio.pause();
-      currentTtsAudio.currentTime = 0;
-      currentTtsAudio = null;
-    }
-
-    const res = await fetch("/api/luna/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, persona: state.aiPersona, detected_language: detectedLanguage }),
-    });
-    if (!res.ok) throw new Error("TTS 요청 실패");
-    const audioBlob = await res.blob();
-    if (!state.isAuthenticated || generation !== authGeneration) return;
-    const audioUrl = URL.createObjectURL(audioBlob);
-    const audio = new Audio(audioUrl);
-    currentTtsAudio = audio;
-    audio.play();
-  } catch (err) {
-    console.error("TTS 오류:", err);
-    if (!state.isAuthenticated || generation !== authGeneration) return;
-    toast("음성 재생에 실패했어요. 텍스트로 확인해 주세요.");
-  }
+function speakReply(text, detectedLanguage = null) {
+  if (!state.isAuthenticated || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text.replace(/\p{Extended_Pictographic}/gu, ""));
+  utterance.lang = (detectedLanguage || window.MoovI18n?.locale() || "ko-KR").startsWith("en") ? "en-US" : "ko-KR";
+  utterance.rate = 1.2;
+  window.speechSynthesis.speak(utterance);
 }
 
-async function startVoiceConversation() {
+function startVoiceConversation() {
   if (!state.isAuthenticated) return;
-  const generation = authGeneration;
   if (!state.aiVoiceEnabled) {
     toast("음성 대화가 꺼져 있어요. 설정에서 다시 켤 수 있어요.");
     return;
   }
-  // 기획서 B-11 정책: 마이크를 누르면 즉시 듣는 중 상태(빨간 버튼 + 파형)로 전환한다.
-  state.aiStatus = "listening";
-  render();
-
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  } catch {
-    if (!state.isAuthenticated || generation !== authGeneration) return;
-    state.aiStatus = "idle";
-    render();
-    toast("마이크 권한을 확인할 수 없어 데모로 표시돼요. 텍스트로도 대화할 수 있어요.");
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    toast("이 브라우저는 음성 인식을 지원하지 않아요. Chrome이나 Edge에서 열어 주세요.");
     return;
   }
+  const generation = authGeneration;
+  const lang = window.MoovI18n?.locale() || "ko-KR";
+  const recognition = new Recognition();
+  recognition.lang = lang;
+  recognition.interimResults = false;
+  speechRecognition = recognition;
+  let text = "";
+  // B-11: 최대 발화 시간 20초 (무음 감지는 브라우저가 자동으로 처리)
+  const maxListenTimer = setTimeout(() => recognition.stop(), 20000);
 
-  if (!state.isAuthenticated || generation !== authGeneration) { stream.getTracks().forEach(track => track.stop()); return; }
-  audioStream = stream;
-  const recordedChunks = [];
-  audioChunks = recordedChunks;
-  const recorder = new MediaRecorder(stream);
-  mediaRecorder = recorder;
-  recorder.ondataavailable = (e) => recordedChunks.push(e.data);
-
-  // B-11: 무음 임계값(800ms) 감지 — 음량을 측정해 조용한 상태가 이어지면 자동 종료
-  const audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(stream);
-  const analyser = audioContext.createAnalyser();
-  analyser.fftSize = 512;
-  source.connect(analyser);
-  const dataArray = new Uint8Array(analyser.frequencyBinCount);
-  const SILENCE_THRESHOLD = 8;
-  const SILENCE_MS = 800;
-  let silenceTimer = null;
-  let stopped = false;
-
-  const checkSilence = () => {
-    if (!state.isAuthenticated || generation !== authGeneration) { finishRecording(); return; }
-    if (stopped) return;
-    analyser.getByteFrequencyData(dataArray);
-    const volume = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length;
-    if (volume < SILENCE_THRESHOLD) {
-      if (!silenceTimer) silenceTimer = setTimeout(finishRecording, SILENCE_MS);
-    } else if (silenceTimer) {
-      clearTimeout(silenceTimer);
-      silenceTimer = null;
-    }
-    requestAnimationFrame(checkSilence);
+  recognition.onresult = (event) => { text = event.results[0][0].transcript; };
+  recognition.onerror = (event) => {
+    if (event.error === "not-allowed") toast("마이크 권한을 허용해 주세요. 텍스트로도 대화할 수 있어요.");
   };
-
-  // B-11: 무한 듣기 상태 방지 — 최대 발화 시간(20초) 초과 시 강제 종료
-  const MAX_LISTEN_MS = 20000;
-  const maxListenTimer = setTimeout(() => {
-    if (state.isAuthenticated && generation === authGeneration) toast("최대 발화 시간을 초과해 자동으로 종료했어요.");
-    finishRecording();
-  }, MAX_LISTEN_MS);
-
-  function finishRecording() {
-    if (stopped) return;
-    stopped = true;
-    clearTimeout(silenceTimer);
+  recognition.onend = () => {
     clearTimeout(maxListenTimer);
-    audioContext.close();
-    if (recorder.state !== "inactive") recorder.stop();
-  }
-
-  recorder.onstop = async () => {
+    if (speechRecognition !== recognition) return; // stopVoiceConversation으로 중단된 경우
+    speechRecognition = null;
     if (!state.isAuthenticated || generation !== authGeneration) return;
-    stream.getTracks().forEach((track) => track.stop());
     state.aiStatus = "idle";
     render();
-
-    const audioBlob = new Blob(recordedChunks, { type: "audio/webm" });
-    if (audioBlob.size < 1000) return; // 너무 짧으면(무음 등) 전송하지 않음
-
-    let text = "";
-    let detectedLanguage = null;
-    try {
-      const formData = new FormData();
-      formData.append("audio", audioBlob, "speech.webm");
-      const res = await fetch("/api/luna/stt", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!state.isAuthenticated || generation !== authGeneration) return;
-      if (data.error) {
-        toast("음성을 확인하지 못했어요. 다시 말하거나 텍스트로 입력해 주세요.");
-        return;
-      }
-      text = data.text;
-      detectedLanguage = data.detected_language;
-    } catch {
-      if (!state.isAuthenticated || generation !== authGeneration) return;
-      toast("음성 인식 서버에 연결할 수 없어요.");
-      return;
-    }
-    if (text.trim()) sendMessage(text.trim(), true, detectedLanguage);
+    if (text.trim()) sendMessage(text.trim(), true, lang);
   };
 
-  recorder.start();
-  requestAnimationFrame(checkSilence);
+  state.aiStatus = "listening";
+  render();
+  recognition.start();
 }
 
 function stopVoiceConversation(status = "idle") {
+  const recognition = speechRecognition;
+  speechRecognition = null;
+  recognition?.abort();
   if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
   if (audioStream) { audioStream.getTracks().forEach((track) => track.stop()); audioStream = null; }
   if ("speechSynthesis" in window) status === "paused" ? window.speechSynthesis.pause() : window.speechSynthesis.cancel();

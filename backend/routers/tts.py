@@ -1,4 +1,7 @@
 # backend/routers/tts.py
+# ※ 로컬 버전에서는 사용하지 않는 파일입니다 (main.py에서 연결 해제).
+#    루나 음성은 브라우저 내장 기능으로 대체 → front/public/moov.html의 speakReply 함수 참고
+#    Azure Speech로 되돌리려면 main.py에서 이 라우터를 다시 include하면 됩니다.
 import io
 import re
 import azure.cognitiveservices.speech as speechsdk

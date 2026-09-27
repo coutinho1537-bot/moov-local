@@ -2,18 +2,16 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from openai import AzureOpenAI
+from openai import OpenAI
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
-# --- 채팅/임베딩 클라이언트 — Azure AI Foundry ---
-client = AzureOpenAI(
-    azure_endpoint=os.environ["AZURE_FOUNDRY_ENDPOINT"],
-    api_key=os.environ["AZURE_FOUNDRY_API_KEY"],
-    api_version=os.environ["AZURE_OPENAI_API_VERSION"],
+# --- 채팅 클라이언트 — OpenAI 호환 API (로컬 버전: Gemini 기본, .env만 바꾸면 Ollama 등도 가능) ---
+client = OpenAI(
+    base_url=os.environ["LLM_BASE_URL"],
+    api_key=os.environ["LLM_API_KEY"],
 )
 
-AZURE_OPENAI_DEPLOYMENT_NAME = os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"]
-AZURE_EMBEDDING_DEPLOYMENT_NAME = os.environ["AZURE_EMBEDDING_DEPLOYMENT_NAME"]
-AZURE_SPEECH_KEY = os.environ["AZURE_SPEECH_KEY"]
-AZURE_SPEECH_REGION = os.environ["AZURE_SPEECH_REGION"]
+# 다른 파일(chat.py, rag.py)을 건드리지 않도록 기존 변수 이름을 그대로 쓴다
+AZURE_OPENAI_DEPLOYMENT_NAME = os.environ["LLM_MODEL"]
+AZURE_EMBEDDING_DEPLOYMENT_NAME = os.getenv("LLM_EMBEDDING_MODEL", "")

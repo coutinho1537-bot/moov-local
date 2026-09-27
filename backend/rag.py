@@ -67,7 +67,7 @@ def _search(query: str, vector: list[float], persona: str, source_type: str, top
 
 def _search_knowledge(query: str, persona: str) -> dict | None:
     """무브·토닥이·척척박사: D#(정확한 값)와 S#(보완 설명)를 각각 검색해 설계서 7.3 형식으로 만든다."""
-    if not query.strip():
+    if not query.strip() or not os.environ.get("AZURE_SEARCH_ENDPOINT"):  # 로컬: AI Search 없으면 건너뜀
         return None
     try:
         vector = get_embedding(query)
@@ -99,7 +99,7 @@ def _search_knowledge(query: str, persona: str) -> dict | None:
 
 def _lingo_course_ids(query: str) -> list[str] | None:
     """AI Search에서 질문과 관련된 코스 id를 찾는다. 색인이 비었거나 검색 결과가 없으면 None(=전체 읽기로 대체)."""
-    if not query.strip():
+    if not query.strip() or not os.environ.get("AZURE_SEARCH_ENDPOINT"):  # 로컬: AI Search 없으면 전체 읽기
         return None
     try:
         vector = get_embedding(query)
