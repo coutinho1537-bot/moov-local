@@ -1,0 +1,12 @@
+# Vercel 배포용 — backend/requirements.txt와 같은 목록입니다. 패키지를 바꾸면 두 파일을 함께 고쳐 주세요.
+fastapi                         # 루나 프록시 서버의 웹 프레임워크 (API 엔드포인트 정의)
+uvicorn[standard]               # FastAPI 앱을 실행하는 ASGI 서버 (standard=성능 최적화 의존성 포함)
+openai                          # Azure AI Foundry(gpt-5.6-luna) 호출용 클라이언트 SDK
+python-dotenv                   # .env 파일에서 환경변수(API 키, 엔드포인트 등) 로드
+psycopg2-binary                 # Azure PostgreSQL Flexible Server(moov-postgres-eastus2) 연결용 DB 드라이버
+pgvector                        # PostgreSQL의 pgvector 확장을 Python에서 다루기 위한 라이브러리 (벡터 RAG 검색용)
+python-multipart                # FastAPI가 UploadFile을 받으려면 필요 (루나 음성 파일, 나들이 코스 이미지 업로드)
+azure-storage-blob              # Azure Blob Storage 업로드 (course-images: 나들이 코스 사진 / taxiproductimage: 핫 상품 이미지)
+google-auth>=2.38,<3            # Google ID 토큰 서명·audience·issuer·만료 검증
+requests>=2.32,<3               # Google OAuth 코드 교환 및 공개 인증서 조회 (서버 전용)
+cryptography>=46,<51            # Google 로그인 프로필·OAuth 임시값 저장 암호화

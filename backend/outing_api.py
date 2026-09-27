@@ -53,7 +53,10 @@ router = APIRouter(prefix="/api/outing", tags=["outing"])
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
-UPLOAD_DIR.mkdir(exist_ok=True)
+try:
+    UPLOAD_DIR.mkdir(exist_ok=True)
+except OSError:  # 배포 버전: Vercel처럼 코드 폴더가 읽기 전용이면 건너뜀 (업로드는 Blob 없이는 어차피 미사용)
+    pass
 AZURE_LLM_USAGE_PATH = Path(__file__).parent / ".moov-azure-openai-usage.json"
 PIXABAY_CACHE_PATH = Path(__file__).parent / ".moov-pixabay-image-cache.json"
 

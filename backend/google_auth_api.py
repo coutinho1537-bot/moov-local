@@ -29,7 +29,8 @@ else:
 
 
 router = APIRouter(prefix='/api/auth', tags=['authentication'])
-DB_PATH = Path(__file__).with_name('.auth-sessions.sqlite3')
+# 배포 버전: Vercel은 코드 폴더에 쓸 수 없어서 AUTH_SESSION_DB_PATH(예: /tmp/auth-sessions.sqlite3)로 위치를 바꿀 수 있게 함
+DB_PATH = Path(os.getenv('AUTH_SESSION_DB_PATH') or Path(__file__).with_name('.auth-sessions.sqlite3'))
 SESSION_COOKIE = 'moov_session'
 FLOW_COOKIE = 'moov_google_flow'
 FLOW_TTL = 10 * 60
@@ -267,8 +268,10 @@ def auth_config():
 
 def _demo_enabled():
     try:
+        # 배포 버전: DEMO_LOGIN_ALLOW_REMOTE=true이면 localhost가 아닌 배포 주소에서도 시연 계정 허용
         return (os.getenv('ENABLE_DEMO_LOGIN', 'true').lower() == 'true'
-                and urlsplit(_app_base()).hostname in ('localhost', '127.0.0.1', '::1'))
+                and (os.getenv('DEMO_LOGIN_ALLOW_REMOTE', 'false').lower() == 'true'
+                     or urlsplit(_app_base()).hostname in ('localhost', '127.0.0.1', '::1')))
     except ValueError:
         return False
 
